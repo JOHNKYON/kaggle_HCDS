@@ -12,6 +12,9 @@ sklearn = "*"
 scipy = "*"
 matplotlib = "*"
 lightgbm = "*"
+seaborn = "*"
+jupyter = "*"
+scikit-learn = "*"
 
 [dev-packages]
 

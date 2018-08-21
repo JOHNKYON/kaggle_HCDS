@@ -1,6 +1,6 @@
-import pandas as pd
-import numpy as np
-import gc
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 
 import lightgbm as lgb
 
@@ -8,18 +8,20 @@ from sklearn.model_selection import KFold
 from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import LabelEncoder
 
-import matplotlib.pyplot as plt
+from matplotlib import pyplot as plt
+import numpy as np
+import pandas as pd
 import seaborn as sns
 
-import warnings
-warnings.filterwarnings("ignore")
+import gc
 
-plt.style.use('fivethirtyeight')
-
-
-# Plot the distribution of a variable colored by value of the target
 def kde_target(var_name, df):
-
+    """
+    Plot the correlation between the target and given variable.
+    :param var_name: String, the name of the given variable.
+    :param df: Dataframe that contains both the given variable and the 'TARGET' column.
+    :return:
+    """
     # Calculate the correlation coeffienct between the new variable and the target
     corr = df['TARGET'].corr(df[var_name])
 
@@ -144,46 +146,12 @@ def count_categorical(df, group_var, df_name):
     return categorical
 
 
-# Read in new copies of all the dataframes
-train = pd.read_csv('../data/application_train.csv')
-bureau = pd.read_csv('../data/bureau.csv')
-bureau_balance = pd.read_csv('../data/bureau_balance.csv')
-
-bureau_counts = count_categorical(bureau, group_var='SK_ID_CURR', df_name='bureau')
-bureau_agg = agg_numeric(bureau.drop(columns=['SK_ID_BUREAU']),
-                         group_var='SK_ID_CURR', df_name='bureau')
-bureau_balance_counts = count_categorical(bureau_balance, group_var='SK_ID_BUREAU', df_name='bureau_balance')
-bureau_balance_agg = agg_numeric(bureau_balance, group_var='SK_ID_BUREAU', df_name='bureau_balance')
-
-# Dataframe grouped by the loan
-bureau_by_loan = bureau_balance_agg.merge(bureau_balance_counts,
-                                          right_index = True, left_on = 'SK_ID_BUREAU', how='outer')
-
-# Merge to include the SK_ID_CURR
-bureau_by_loan = bureau[['SK_ID_BUREAU', 'SK_ID_CURR']].merge(bureau_by_loan, on='SK_ID_BUREAU', how='left')
-
-# Aggregate the stats for each client
-bureau_balance_by_client = agg_numeric(bureau_by_loan.drop(columns=['SK_ID_BUREAU']),
-                                       group_var='SK_ID_CURR', df_name='client')
-
-original_features = list(train.columns)
-print('Original Number of Features: ', len(original_features))
-
-# Merge with the value counts of bureau
-train = train.merge(bureau_counts, on='SK_ID_CURR', how='left')
-
-# Merge with the stats of bureau
-train = train.merge(bureau_agg, on='SK_ID_CURR', how='left')
-
-# Merge with the monthly information grouped by client
-train = train.merge(bureau_balance_by_client, on='SK_ID_CURR', how='left')
-
-new_features = list(train.columns)
-print('Number of features using previous loans from other institutions data: ', len(new_features))
-
-
-# Function to calculate missing values by column
 def missing_values_table(df):
+    """
+    Function to calculate missing values by column
+    :param df:
+    :return:
+    """
     # Total missing values
     mis_val = df.isnull().sum()
 
@@ -211,94 +179,7 @@ def missing_values_table(df):
     return mis_val_table_ren_columns
 
 
-missing_train = missing_values_table(train)
-
-missing_train_vars = list(missing_train.index[missing_train['% of Total Values'] > 90])
-
-# Read in the test dataframe
-test = pd.read_csv('../data/application_test.csv')
-
-# Merge with the value counts of bureau
-test = test.merge(bureau_counts, on='SK_ID_CURR', how='left')
-# Merge with the stats of bureau
-test = test.merge(bureau_agg, on='SK_ID_CURR', how='left')
-
-# Merge with the value counts of bureau balance
-test = test.merge(bureau_balance_by_client, on='SK_ID_CURR', how='left')
-
-print('Shape of Testing Data: ', test.shape)
-
-train_labels = train['TARGET']
-
-# Align the dataframes, this will remove the 'TARGET' column
-train, test = train.align(test, join='inner', axis=1)
-train['TARGET'] = train_labels
-
-print('Training Data Shape: ', train.shape)
-print('Testing Data Shape ', test.shape)
-
-missing_test = missing_values_table(test)
-missing_test_vars = list(missing_test.index[missing_test['% of Total Values'] > 90])
-len(missing_test_vars)
-
-missing_columns = list(set(missing_test_vars+missing_train_vars))
-print('There are %d columns with more than 90%% missing in either the training or testing data.'
-     % len(missing_columns))
-
-# Drop the missing columns
-train = train.drop(columns=missing_columns)
-test = test.drop(columns=missing_columns)
-
-train.to_csv('train_bureau_raw.csv', index=False)
-test.to_csv('test_bureau_raw.csv', index=False)
-
-# Calculate all correlations in dataframe
-corrs = train.corr()
-
-corrs = corrs.sort_values('TARGET', ascending=False)
-
-# Set the threshold
-threshold = 0.8
-
-# Empty dictionary to hold correlated variables
-above_threshold_vars = {}
-
-# For each column, record the variables that are above the threshold
-for col in corrs:
-    above_threshold_vars[col] = list(corrs.index[corrs[col] > threshold])
-
-# Track columns to remove and columns already examined
-cols_to_remove = []
-cols_seen = []
-cols_to_remove_paire = []
-
-# Iterate through columns and correlated columns
-for key, value in above_threshold_vars.items():
-    # Keep track of columns already examined
-    cols_seen.append(key)
-    for x in value:
-        if x == key:
-            next
-        else:
-            # Only want to remove on in a pair
-            if x not in cols_seen:
-                cols_to_remove.append(x)
-                cols_to_remove_paire.append(key)
-
-cols_to_remove = list(set(cols_to_remove))
-print('Number of columns to remove: ', len(cols_to_remove))
-
-train_corrs_removed = train.drop(columns=cols_to_remove)
-test_corrs_removed = test.drop(columns=cols_to_remove)
-
-print('Training Corrs Removed Shape: ', train_corrs_removed.shape)
-print('Test Corrs Removed ShapeL ', test_corrs_removed.shape)
-
-train_corrs_removed.to_csv('train_bureau_corrs_removed.csv', index=False)
-test_corrs_removed.to_csv('test_bureau_corrs_removed.csv', index=False)
-
-
-def model(features, test_features, encoding='ohe', n_folds=5):
+def light_gbm(features, test_features, encoding='ohe', n_folds=5):
     """Train and test a light gradient boosting model using
     cross validation.
 
@@ -505,11 +386,3 @@ def plot_feature_importances(df):
     plt.show()
 
     return df
-
-
-train_control = pd.read_csv('../data/application_train.csv')
-test_control = pd.read_csv('../data/application_test.csv')
-
-submission, fi, metrics = model(train_control, test_control)
-
-submission.to_csv('control.csv', index=False)
