@@ -512,4 +512,4 @@ test_control = pd.read_csv('../data/application_test.csv')
 
 submission, fi, metrics = model(train_control, test_control)
 
-submission.to_csv('control.csv', index=False)
+submission.to_csv('lightGBM.csv', index=False)
